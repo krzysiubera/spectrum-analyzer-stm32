@@ -18,6 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "adc.h"
 #include "usart.h"
 #include "gpio.h"
 
@@ -88,18 +89,24 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_USART3_UART_Init();
+  MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
-
+  uint32_t adc_value_polling = 0;
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    printf("Counter: %lu\n", HAL_GetTick());
+    HAL_ADC_Start(&hadc1);
+    if (HAL_ADC_PollForConversion(&hadc1, 10) == HAL_OK)
+    {
+      adc_value_polling = HAL_ADC_GetValue(&hadc1);
+      printf("%lu\n", adc_value_polling);
+    }
+    HAL_ADC_Stop(&hadc1);
+    HAL_Delay(100);
 
-    HAL_GPIO_TogglePin(BLUE_LED_GPIO_Port, BLUE_LED_Pin);
-    HAL_Delay(1000);
 
     /* USER CODE END WHILE */
 
