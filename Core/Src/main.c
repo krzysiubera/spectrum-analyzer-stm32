@@ -51,8 +51,10 @@
 /* USER CODE BEGIN PV */
 uint16_t adc_buffer[TOTAL_BUFFER_SIZE];
 
-// 0 - nic, 1 - pierwsza połowa, 2 - druga połowa
+// 0 - nothing ready, 1 - first half ready, 2 - second half ready
 volatile uint8_t buffer_ready_flag = 0;
+
+float32_t fft_input_buffer[CHUNK_SIZE];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -63,6 +65,27 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+void process_data(uint16_t* data, uint16_t length)
+{
+    // convert from uint16_t to float
+    for (size_t i = 0; i < length; i++)
+    {
+        fft_input_buffer[i] = (float32_t) data[i] - 2048.0f;
+    }
+
+    float32_t mean;
+
+    // calculate mean
+    arm_mean_f32(fft_input_buffer, length, &mean);
+
+    // remove DC offset
+    arm_offset_f32(fft_input_buffer, -mean, fft_input_buffer, length);
+
+    // check what is the first sample of preprocessed signal
+    printf("%d\n", (int) fft_input_buffer);
+}
+
 
 /* USER CODE END 0 */
 
@@ -111,16 +134,16 @@ int main(void)
   {
     if (buffer_ready_flag == 1)
     {
-      // process first half of the buffer - just print first element
-      printf("%d\n", adc_buffer[0]);
+      // process first half of the buffer
+      process_data(&adc_buffer[0], CHUNK_SIZE);
       
       // clean the flag
       buffer_ready_flag = 0;
     }
     else if (buffer_ready_flag == 2)
     {
-      // process second half of the buffer - just print first element
-      printf("%d\n", adc_buffer[CHUNK_SIZE]);
+      // process second half of the buffer
+      process_data(&adc_buffer[CHUNK_SIZE], CHUNK_SIZE);
 
       // clean the flag
       buffer_ready_flag = 0;
