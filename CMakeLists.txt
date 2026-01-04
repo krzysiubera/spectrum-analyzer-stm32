@@ -45,16 +45,29 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
+
+    # CMSIS DSP sources
+    Drivers/CMSIS_DSP/Source/BasicMathFunctions/BasicMathFunctions.c
+    Drivers/CMSIS_DSP/Source/StatisticsFunctions/StatisticsFunctions.c
+    Drivers/CMSIS_DSP/Source/SupportFunctions/SupportFunctions.c
+    Drivers/CMSIS_DSP/Source/TransformFunctions/TransformFunctions.c
 )
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths
+
+    # CMSIS DSP includes
+    Drivers/CMSIS_DSP/Include
+    Drivers/CMSIS_DSP/PrivateInclude
 )
 
 # Add project symbols (macros)
 target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined symbols
+
+    # CMSIS DSP compile definitions
+    ARM_MATH_CM4
 )
 
 # Remove wrong libob.a library dependency when using cpp files
