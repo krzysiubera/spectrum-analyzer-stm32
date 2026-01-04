@@ -19,6 +19,8 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "adc.h"
+#include "dma.h"
+#include "tim.h"
 #include "usart.h"
 #include "gpio.h"
 
@@ -34,7 +36,8 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+#define CHUNK_SIZE 2048
+#define TOTAL_BUFFER_SIZE (CHUNK_SIZE * 2)
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -45,7 +48,10 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
+uint16_t adc_buffer[TOTAL_BUFFER_SIZE];
 
+// 0 - nic, 1 - pierwsza połowa, 2 - druga połowa
+volatile uint8_t buffer_ready_flag = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -88,26 +94,36 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_USART3_UART_Init();
   MX_ADC1_Init();
+  MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
-  uint32_t adc_value_polling = 0;
+  HAL_TIM_Base_Start(&htim3);
+  HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buffer, TOTAL_BUFFER_SIZE);
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    HAL_ADC_Start(&hadc1);
-    if (HAL_ADC_PollForConversion(&hadc1, 10) == HAL_OK)
+    if (buffer_ready_flag == 1)
     {
-      adc_value_polling = HAL_ADC_GetValue(&hadc1);
-      printf("%lu\n", adc_value_polling);
+      // process first half of the buffer - just print first element
+      printf("%d\n", adc_buffer[0]);
+      
+      // clean the flag
+      buffer_ready_flag = 0;
     }
-    HAL_ADC_Stop(&hadc1);
-    HAL_Delay(100);
+    else if (buffer_ready_flag == 2)
+    {
+      // process second half of the buffer - just print first element
+      printf("%d\n", adc_buffer[CHUNK_SIZE]);
 
-
+      // clean the flag
+      buffer_ready_flag = 0;
+    }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -157,10 +173,28 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
-int _write(int file, char *ptr, int len) {
+int _write(int file, char *ptr, int len) 
+{
     HAL_UART_Transmit(&huart3, (uint8_t *)ptr, len, 10);
     return len;
 }
+
+void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc)
+{
+    if (hadc->Instance == ADC1)
+    {
+        buffer_ready_flag = 1;
+    }
+}
+
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
+{
+    if (hadc->Instance == ADC1)
+    {
+        buffer_ready_flag = 2;
+    }
+}
+
 /* USER CODE END 4 */
 
 /**
