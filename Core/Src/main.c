@@ -28,6 +28,9 @@
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
 #include "arm_math.h"
+#include "arm_const_structs.h"
+#include <math.h>
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -37,8 +40,15 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+
+// refer to ADC buffer size
 #define CHUNK_SIZE 2048
 #define TOTAL_BUFFER_SIZE (CHUNK_SIZE * 2)
+
+// refer to FFT buffer size
+#define FFT_FULL_BUFFER_SIZE CHUNK_SIZE
+#define FFT_REAL_BUFFER_SIZE (FFT_FULL_BUFFER_SIZE / 2)
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -49,12 +59,24 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
+// adc samples buffer
 uint16_t adc_buffer[TOTAL_BUFFER_SIZE];
 
 // 0 - nothing ready, 1 - first half ready, 2 - second half ready
 volatile uint8_t buffer_ready_flag = 0;
 
-float32_t fft_input_buffer[CHUNK_SIZE];
+// input buffer passed to CMSIS FFT
+float32_t fft_input_buffer[FFT_FULL_BUFFER_SIZE];
+
+// output buffer from CMSIS FFT
+float32_t fft_output_buffer[FFT_FULL_BUFFER_SIZE];
+
+// magnitude of FFT buffer
+float32_t fft_magnitude_buffer[FFT_REAL_BUFFER_SIZE];
+
+// CMSIS FFT instance
+arm_rfft_fast_instance_f32 fft_instance;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -82,8 +104,38 @@ void process_data(uint16_t* data, uint16_t length)
     // remove DC offset
     arm_offset_f32(fft_input_buffer, -mean, fft_input_buffer, length);
 
-    // check what is the first sample of preprocessed signal
-    printf("%d\n", (int) fft_input_buffer);
+    // init FFT
+    arm_rfft_fast_init_f32(&fft_instance, FFT_FULL_BUFFER_SIZE);
+
+    // do the FFT
+    arm_rfft_fast_f32(&fft_instance, fft_input_buffer, fft_output_buffer, 0);
+
+    // peak detector
+    float peak_value = 0.0f;
+    uint16_t peak_bin = 0U;
+    
+    uint16_t num_bins = FFT_FULL_BUFFER_SIZE / 2;
+    for (uint16_t bin = 1; bin < num_bins; ++bin)
+    {
+        // CMSIS-DSP returns FFT in the interleaved form: {real_0, imag_0, ..., real_idx, imag_idx}
+        uint16_t idx = 2 * bin;
+
+        float real = fft_output_buffer[idx];
+        float imag = fft_output_buffer[idx + 1];
+        float mag = sqrtf(real * real + imag * imag);
+
+        if (mag > peak_value)
+        {
+            peak_value = mag;
+            peak_bin = bin;
+        }
+    }
+
+    float peak_hz = peak_bin * 16000.0f / FFT_FULL_BUFFER_SIZE;
+  
+    // visualize
+    printf("peak_val = %d, peak_hz=%d\n", (int) peak_value, (int) peak_hz);
+    
 }
 
 
