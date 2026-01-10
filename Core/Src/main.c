@@ -49,6 +49,8 @@
 #define FFT_FULL_BUFFER_SIZE CHUNK_SIZE
 #define FFT_REAL_BUFFER_SIZE (FFT_FULL_BUFFER_SIZE / 2)
 
+#define PI 3.14159265358979f
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -77,6 +79,9 @@ float32_t fft_magnitude_buffer[FFT_REAL_BUFFER_SIZE];
 // CMSIS FFT instance
 arm_rfft_fast_instance_f32 fft_instance;
 
+// window coefficients
+float32_t window_buffer[FFT_FULL_BUFFER_SIZE];
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -104,8 +109,8 @@ void process_data(uint16_t* data, uint16_t length)
     // remove DC offset
     arm_offset_f32(fft_input_buffer, -mean, fft_input_buffer, length);
 
-    // init FFT
-    arm_rfft_fast_init_f32(&fft_instance, FFT_FULL_BUFFER_SIZE);
+    // apply window function
+    arm_mult_f32(fft_input_buffer, window_buffer, fft_input_buffer, length);
 
     // do the FFT
     arm_rfft_fast_f32(&fft_instance, fft_input_buffer, fft_output_buffer, 0);
@@ -136,6 +141,14 @@ void process_data(uint16_t* data, uint16_t length)
     // visualize
     printf("peak_val = %d, peak_hz=%d\n", (int) peak_value, (int) peak_hz);
     
+}
+
+void generate_hanning_window(float32_t* p_dst, uint16_t length)
+{
+    for (uint32_t i = 0; i < length; ++i)
+    {
+        p_dst[i] = 0.5f * (1.0f - arm_cos_f32(2.0f * PI * (float32_t)i / (float32_t) length));
+    }
 }
 
 
@@ -177,6 +190,11 @@ int main(void)
   /* USER CODE BEGIN 2 */
   HAL_TIM_Base_Start(&htim3);
   HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buffer, TOTAL_BUFFER_SIZE);
+
+  // init FFT
+  arm_rfft_fast_init_f32(&fft_instance, FFT_FULL_BUFFER_SIZE);
+
+  generate_hanning_window(window_buffer, FFT_FULL_BUFFER_SIZE);
 
   /* USER CODE END 2 */
 

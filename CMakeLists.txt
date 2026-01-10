@@ -50,6 +50,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Drivers/CMSIS_DSP/Source/BasicMathFunctions/BasicMathFunctions.c
     Drivers/CMSIS_DSP/Source/CommonTables/CommonTables.c
     Drivers/CMSIS_DSP/Source/ComplexMathFunctions/ComplexMathFunctions.c
+    Drivers/CMSIS_DSP/Source/FastMathFunctions/FastMathFunctions.c
     Drivers/CMSIS_DSP/Source/StatisticsFunctions/StatisticsFunctions.c
     Drivers/CMSIS_DSP/Source/SupportFunctions/SupportFunctions.c
     Drivers/CMSIS_DSP/Source/TransformFunctions/TransformFunctions.c
