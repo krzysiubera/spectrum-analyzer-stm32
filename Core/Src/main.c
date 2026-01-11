@@ -29,7 +29,6 @@
 #include <stdio.h>
 #include "arm_math.h"
 #include "arm_const_structs.h"
-#include <math.h>
 
 /* USER CODE END Includes */
 
@@ -50,6 +49,7 @@
 #define FFT_REAL_BUFFER_SIZE (FFT_FULL_BUFFER_SIZE / 2)
 
 #define PI 3.14159265358979f
+#define SAMPLING_FREQ 16000.0f
 
 /* USER CODE END PD */
 
@@ -115,28 +115,17 @@ void process_data(uint16_t* data, uint16_t length)
     // do the FFT
     arm_rfft_fast_f32(&fft_instance, fft_input_buffer, fft_output_buffer, 0);
 
-    // peak detector
+    // calculate magnitude
+    arm_cmplx_mag_f32(fft_output_buffer, fft_magnitude_buffer, FFT_REAL_BUFFER_SIZE);
+
+    // peak detector - skip DC offset
     float peak_value = 0.0f;
-    uint16_t peak_bin = 0U;
-    
-    uint16_t num_bins = FFT_FULL_BUFFER_SIZE / 2;
-    for (uint16_t bin = 1; bin < num_bins; ++bin)
-    {
-        // CMSIS-DSP returns FFT in the interleaved form: {real_0, imag_0, ..., real_idx, imag_idx}
-        uint16_t idx = 2 * bin;
-
-        float real = fft_output_buffer[idx];
-        float imag = fft_output_buffer[idx + 1];
-        float mag = sqrtf(real * real + imag * imag);
-
-        if (mag > peak_value)
-        {
-            peak_value = mag;
-            peak_bin = bin;
-        }
-    }
-
-    float peak_hz = peak_bin * 16000.0f / FFT_FULL_BUFFER_SIZE;
+    uint32_t peak_bin = 0U;
+    arm_max_f32(&fft_magnitude_buffer[1], FFT_REAL_BUFFER_SIZE - 1, &peak_value, &peak_bin);
+    // if peak was found at n-th index of the buffer passed to arm_max_f32
+    // this means n-1 index of fft_magnitude_buffer - so we need to adjujst
+    peak_bin++;
+    float peak_hz = peak_bin * SAMPLING_FREQ / FFT_FULL_BUFFER_SIZE;
   
     // visualize
     printf("peak_val = %d, peak_hz=%d\n", (int) peak_value, (int) peak_hz);
