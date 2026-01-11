@@ -95,6 +95,8 @@ void SystemClock_Config(void);
 
 void process_data(uint16_t* data, uint16_t length)
 {
+    HAL_GPIO_WritePin(ANALYZER_PIN_2_GPIO_Port, ANALYZER_PIN_2_Pin, GPIO_PIN_SET);
+
     // convert from uint16_t to float
     for (size_t i = 0; i < length; i++)
     {
@@ -126,9 +128,13 @@ void process_data(uint16_t* data, uint16_t length)
     // this means n-1 index of fft_magnitude_buffer - so we need to adjujst
     peak_bin++;
     float peak_hz = peak_bin * SAMPLING_FREQ / FFT_FULL_BUFFER_SIZE;
+
+    HAL_GPIO_WritePin(ANALYZER_PIN_2_GPIO_Port, ANALYZER_PIN_2_Pin, GPIO_PIN_RESET);
   
     // visualize
+    HAL_GPIO_WritePin(ANALYZER_PIN_3_GPIO_Port, ANALYZER_PIN_3_Pin, GPIO_PIN_SET);
     printf("peak_val = %d, peak_hz=%d\n", (int) peak_value, (int) peak_hz);
+    HAL_GPIO_WritePin(ANALYZER_PIN_3_GPIO_Port, ANALYZER_PIN_3_Pin, GPIO_PIN_RESET);
     
 }
 
@@ -264,6 +270,7 @@ int _write(int file, char *ptr, int len)
 
 void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc)
 {
+    HAL_GPIO_WritePin(ANALYZER_PIN_1_GPIO_Port, ANALYZER_PIN_1_Pin, GPIO_PIN_SET);
     if (hadc->Instance == ADC1)
     {
         buffer_ready_flag = 1;
@@ -272,6 +279,7 @@ void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc)
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 {
+    HAL_GPIO_WritePin(ANALYZER_PIN_1_GPIO_Port, ANALYZER_PIN_1_Pin, GPIO_PIN_RESET);
     if (hadc->Instance == ADC1)
     {
         buffer_ready_flag = 2;
