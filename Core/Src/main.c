@@ -41,7 +41,7 @@
 /* USER CODE BEGIN PD */
 
 // refer to ADC buffer size
-#define CHUNK_SIZE 2048
+#define CHUNK_SIZE 1024
 #define TOTAL_BUFFER_SIZE (CHUNK_SIZE * 2)
 
 // refer to FFT buffer size
