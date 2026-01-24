@@ -51,6 +51,10 @@
 #define PI 3.14159265358979f
 #define SAMPLING_FREQ 16000.0f
 
+// refer to FFT visualization
+#define NUM_BARS 16
+#define SAMPLES_PER_BAR (FFT_REAL_BUFFER_SIZE / NUM_BARS)
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -82,6 +86,9 @@ arm_rfft_fast_instance_f32 fft_instance;
 // window coefficients
 float32_t window_buffer[FFT_FULL_BUFFER_SIZE];
 
+// bars for visualization
+float bars[NUM_BARS];
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -95,6 +102,7 @@ void SystemClock_Config(void);
 
 void process_data(uint16_t* data, uint16_t length)
 {
+    // start measuring signal processing part
     HAL_GPIO_WritePin(ANALYZER_PIN_2_GPIO_Port, ANALYZER_PIN_2_Pin, GPIO_PIN_SET);
 
     // convert from uint16_t to float
@@ -129,11 +137,30 @@ void process_data(uint16_t* data, uint16_t length)
     peak_bin++;
     float peak_hz = peak_bin * SAMPLING_FREQ / FFT_FULL_BUFFER_SIZE;
 
+    // group bars
+    for (size_t bar = 0; bar < NUM_BARS; ++bar)
+    {
+        float bar_height = 0.0f;
+        for (size_t sample = 0; sample < SAMPLES_PER_BAR; ++sample)
+        {
+            bar_height += fft_magnitude_buffer[(bar * SAMPLES_PER_BAR) + sample];
+        }
+        bars[bar] = bar_height;
+    }
+
+    // stop measuring signal processing part
     HAL_GPIO_WritePin(ANALYZER_PIN_2_GPIO_Port, ANALYZER_PIN_2_Pin, GPIO_PIN_RESET);
   
-    // visualize
+    // start measuring visualization time
     HAL_GPIO_WritePin(ANALYZER_PIN_3_GPIO_Port, ANALYZER_PIN_3_Pin, GPIO_PIN_SET);
-    printf("peak_val = %d, peak_hz=%d\n", (int) peak_value, (int) peak_hz);
+    
+    for (size_t bar = 0; bar < NUM_BARS; ++bar)
+    {
+        printf("%d,", (int) bars[bar]);
+    }
+    printf("\n");
+
+    // stop measuring visualization time
     HAL_GPIO_WritePin(ANALYZER_PIN_3_GPIO_Port, ANALYZER_PIN_3_Pin, GPIO_PIN_RESET);
     
 }
