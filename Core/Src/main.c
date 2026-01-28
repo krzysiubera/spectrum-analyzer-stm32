@@ -52,7 +52,7 @@
 #define SAMPLING_FREQ 16000.0f
 
 // refer to FFT visualization
-#define NUM_BARS 16
+#define NUM_BARS 8
 #define SAMPLES_PER_BAR (FFT_REAL_BUFFER_SIZE / NUM_BARS)
 
 /* USER CODE END PD */
