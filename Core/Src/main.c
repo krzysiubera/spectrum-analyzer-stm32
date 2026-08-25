@@ -46,14 +46,27 @@
 
 // refer to FFT buffer size
 #define FFT_FULL_BUFFER_SIZE CHUNK_SIZE
-#define FFT_REAL_BUFFER_SIZE (FFT_FULL_BUFFER_SIZE / 2)
+
+// 512
+#define FFT_NUM_BINS (FFT_FULL_BUFFER_SIZE / 2)
+
+// 511
+#define FFT_NUM_COMPLEX_BINS (FFT_FULL_BUFFER_SIZE / 2 - 1)
 
 #define PI 3.14159265358979f
 #define SAMPLING_FREQ 16000.0f
 
+#define HANN_GAIN 0.5f
+#define FFT_SCALE (2.0f / (FFT_FULL_BUFFER_SIZE * HANN_GAIN))
+#define EPSILON 1e-12f
+
+#define MIN_DB (10.0f)
+#define MAX_DB (65.0f)
+
+#define LCD_HEIGHT 128
+
 // refer to FFT visualization
 #define NUM_BARS 8
-#define SAMPLES_PER_BAR (FFT_REAL_BUFFER_SIZE / NUM_BARS)
 
 /* USER CODE END PD */
 
@@ -78,7 +91,7 @@ float32_t fft_input_buffer[FFT_FULL_BUFFER_SIZE];
 float32_t fft_output_buffer[FFT_FULL_BUFFER_SIZE];
 
 // magnitude of FFT buffer
-float32_t fft_magnitude_buffer[FFT_REAL_BUFFER_SIZE];
+float32_t fft_magnitude_buffer[FFT_NUM_BINS];
 
 // CMSIS FFT instance
 arm_rfft_fast_instance_f32 fft_instance;
@@ -108,7 +121,7 @@ void process_data(uint16_t* data, uint16_t length)
     // convert from uint16_t to float
     for (size_t i = 0; i < length; i++)
     {
-        fft_input_buffer[i] = (float32_t) data[i] - 2048.0f;
+        fft_input_buffer[i] = (float32_t) data[i];
     }
 
     float32_t mean;
@@ -125,26 +138,115 @@ void process_data(uint16_t* data, uint16_t length)
     // do the FFT
     arm_rfft_fast_f32(&fft_instance, fft_input_buffer, fft_output_buffer, 0);
 
-    // calculate magnitude
-    arm_cmplx_mag_f32(fft_output_buffer, fft_magnitude_buffer, FFT_REAL_BUFFER_SIZE);
+    // magnitude
+    // CMSIS-DSP arm_rfft_fast_f32 output format:
+    // fft_output_buffer[0] = Re(DC)
+    // fft_output_buffer[1] = Re(Nyquist)
+    // fft_output_buffer[2] = Re(bin 1)
+    // fft_output_buffer[3] = Im(bin 1)
+    // fft_output_buffer[4] = Re(bin 2)
+    // fft_output_buffer[5] = Im(bin 2)
+    // ...
+    // we ignore Nyquist bin
 
-    // peak detector - skip DC offset
-    float peak_value = 0.0f;
+    // DC
+    fft_magnitude_buffer[0] = fabsf(fft_output_buffer[0]);
+
+    // bins 1.. N/2 - 1
+    for (size_t bin = 1; bin <= FFT_NUM_COMPLEX_BINS; ++bin)
+    {
+        const float32_t real = fft_output_buffer[2 * bin];
+        const float32_t imag = fft_output_buffer[(2 * bin) + 1];
+        fft_magnitude_buffer[bin] = sqrtf(real * real + imag * imag);
+    }
+
+    // normalize magnitude
+
+    // for real input and one-sided spectrum: 
+    // - DC: amplitude = magnitude / (N * window_gain)
+    // - ordinary bins: amplitude = (2 * magnitude) / (N * window_gain)
+    // for Hann - window_gain = 0.5. therefore:
+    // - DC: amplitude = magnitude / (N * 0.5)
+    // - ordinary bins: amplitude = (2 * magnitude) / (N * 0.5)
+
+    // DC
+    fft_magnitude_buffer[0] /= FFT_FULL_BUFFER_SIZE * HANN_GAIN;
+
+    // ordinary bins
+    for (size_t bin = 1; bin <= FFT_NUM_COMPLEX_BINS; ++bin)
+    {
+      fft_magnitude_buffer[bin] *= FFT_SCALE;
+    }
+
+    // magnitude -> db
+    for (size_t bin = 0; bin < FFT_NUM_BINS; ++bin)
+    {
+        fft_magnitude_buffer[bin] = 20.0f * log10f(fmaxf(fft_magnitude_buffer[bin], EPSILON));
+    }
+
+    // // debug: print min and max FFT magnitude in dB
+    // float32_t min_db = fft_magnitude_buffer[0];
+    // float32_t max_db = fft_magnitude_buffer[0];
+
+    // for (size_t bin = 1; bin < FFT_NUM_BINS; ++bin)
+    // {
+    //     if (fft_magnitude_buffer[bin] < min_db)
+    //     {
+    //         min_db = fft_magnitude_buffer[bin];
+    //     }
+
+    //     if (fft_magnitude_buffer[bin] > max_db)
+    //     {
+    //         max_db = fft_magnitude_buffer[bin];
+    //     }
+    // }
+
+    // printf("min=%d,max=%d\n", (int)lrintf(min_db), (int)lrintf(max_db));
+
+    // peak detector
+    float peak_db = 0.0f;
     uint32_t peak_bin = 0U;
-    arm_max_f32(&fft_magnitude_buffer[1], FFT_REAL_BUFFER_SIZE - 1, &peak_value, &peak_bin);
-    // if peak was found at n-th index of the buffer passed to arm_max_f32
-    // this means n-1 index of fft_magnitude_buffer - so we need to adjujst
-    peak_bin++;
-    float peak_hz = peak_bin * SAMPLING_FREQ / FFT_FULL_BUFFER_SIZE;
+    
+    // skip bin 0 because DC should not be interesting after DC removal
+    arm_max_f32(&fft_magnitude_buffer[1], FFT_NUM_BINS - 1, &peak_db, &peak_bin);
 
-    // group bars
+    // arm_max_f32() searched starting at bin 1 - therefore restore the actual fft bin index
+    peak_bin++;
+
+    const float peak_hz = ((float32_t) peak_bin * SAMPLING_FREQ) / FFT_FULL_BUFFER_SIZE;
+
+    // linear grouping into bars
+    // we group bins 0 ... 511 into NUM_BARS groups
+
     for (size_t bar = 0; bar < NUM_BARS; ++bar)
     {
-        float bar_height = 0.0f;
-        for (size_t sample = 0; sample < SAMPLES_PER_BAR; ++sample)
+        const size_t first_bin = (bar * FFT_NUM_BINS) / NUM_BARS;
+        const size_t last_bin = ((bar + 1) * FFT_NUM_BINS) / NUM_BARS;
+
+        float bar_db = MIN_DB;
+
+        for (size_t bin = first_bin; bin < last_bin; ++bin)
         {
-            bar_height += fft_magnitude_buffer[(bar * SAMPLES_PER_BAR) + sample];
+            if (fft_magnitude_buffer[bin] > bar_db)
+            {
+                bar_db = fft_magnitude_buffer[bin];
+            }
         }
+
+        // clamp to display range
+        if (bar_db < MIN_DB)
+        {
+            bar_db = MIN_DB;
+        }
+
+        if (bar_db > MAX_DB)
+        {
+            bar_db = MAX_DB;
+        }
+
+        // map dB to LCD height
+        const float32_t normalized = (bar_db - MIN_DB) / (MAX_DB - MIN_DB);
+        const uint16_t bar_height = (uint16_t) (normalized * LCD_HEIGHT);
         bars[bar] = bar_height;
     }
 
@@ -154,6 +256,7 @@ void process_data(uint16_t* data, uint16_t length)
     // start measuring visualization time
     HAL_GPIO_WritePin(ANALYZER_PIN_3_GPIO_Port, ANALYZER_PIN_3_Pin, GPIO_PIN_SET);
     
+    // visualize bars
     for (size_t bar = 0; bar < NUM_BARS; ++bar)
     {
         printf("%d,", (int) bars[bar]);
