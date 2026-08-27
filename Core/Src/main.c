@@ -60,8 +60,8 @@
 #define FFT_SCALE (2.0f / (FFT_FULL_BUFFER_SIZE * HANN_GAIN))
 #define EPSILON 1e-12f
 
-#define MIN_DB (10.0f)
-#define MAX_DB (65.0f)
+#define MIN_DB (-50.0f)
+#define MAX_DB (0.0f)
 
 #define LCD_HEIGHT 128
 
@@ -131,6 +131,12 @@ void process_data(uint16_t* data, uint16_t length)
 
     // remove DC offset
     arm_offset_f32(fft_input_buffer, -mean, fft_input_buffer, length);
+
+    // normalize signal to approx -1.0 - +1.0
+    for (size_t i = 0; i < length; ++i)
+    {
+        fft_input_buffer[i] /= 2048.f;
+    }
 
     // apply window function
     arm_mult_f32(fft_input_buffer, window_buffer, fft_input_buffer, length);
