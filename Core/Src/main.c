@@ -28,6 +28,8 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
+#include "lvgl.h"
+#include "lvgl/drivers/display/lv_st7735.h"
 #include "arm_math.h"
 #include "arm_const_structs.h"
 
@@ -66,6 +68,10 @@
 
 #define LCD_HEIGHT 128
 
+#define LVGL_TEST_WIDTH 160U
+#define LVGL_TEST_HEIGHT 128U
+#define LVGL_DRAW_BUFFER_LINES 16U
+
 // refer to FFT visualization
 #define NUM_BARS 8
 
@@ -103,16 +109,153 @@ float32_t window_buffer[FFT_FULL_BUFFER_SIZE];
 // bars for visualization
 float bars[NUM_BARS];
 
+static uint16_t lvgl_draw_buffer[LVGL_TEST_WIDTH * LVGL_DRAW_BUFFER_LINES];
+static uint8_t lvgl_pixel_swap_buffer[128];
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
+static void lvgl_lcd_send_cmd(lv_display_t *display, const uint8_t *command, size_t command_size,
+                              const uint8_t *parameters, size_t parameter_size);
+static void lvgl_lcd_send_color(lv_display_t *display, const uint8_t *command, size_t command_size,
+                                uint8_t *pixels, size_t pixel_size);
+static void lvgl_flag_test_init(void);
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+static void lvgl_lcd_send_cmd(lv_display_t *display, const uint8_t *command, size_t command_size,
+                              const uint8_t *parameters, size_t parameter_size)
+{
+    (void)display;
+
+    HAL_GPIO_WritePin(LCD_CS_GPIO_Port, LCD_CS_Pin, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(LCD_DC_GPIO_Port, LCD_DC_Pin, GPIO_PIN_RESET);
+    if (HAL_SPI_Transmit(&hspi1, (uint8_t *)command, (uint16_t)command_size, HAL_MAX_DELAY) != HAL_OK) {
+        Error_Handler();
+    }
+
+    if (parameter_size > 0U) {
+        HAL_GPIO_WritePin(LCD_DC_GPIO_Port, LCD_DC_Pin, GPIO_PIN_SET);
+        if (HAL_SPI_Transmit(&hspi1, (uint8_t *)parameters, (uint16_t)parameter_size, HAL_MAX_DELAY) != HAL_OK) {
+            Error_Handler();
+        }
+    }
+
+    HAL_GPIO_WritePin(LCD_CS_GPIO_Port, LCD_CS_Pin, GPIO_PIN_SET);
+}
+
+static void lvgl_lcd_send_color(lv_display_t *display, const uint8_t *command, size_t command_size,
+                                uint8_t *pixels, size_t pixel_size)
+{
+    if ((pixel_size & 1U) != 0U) {
+        Error_Handler();
+    }
+
+    HAL_GPIO_WritePin(LCD_CS_GPIO_Port, LCD_CS_Pin, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(LCD_DC_GPIO_Port, LCD_DC_Pin, GPIO_PIN_RESET);
+    if (HAL_SPI_Transmit(&hspi1, (uint8_t *)command, (uint16_t)command_size, HAL_MAX_DELAY) != HAL_OK) {
+        Error_Handler();
+    }
+
+    HAL_GPIO_WritePin(LCD_DC_GPIO_Port, LCD_DC_Pin, GPIO_PIN_SET);
+
+    /* ST7735 expects RGB565 pixels most-significant byte first. */
+    for (size_t offset = 0U; offset < pixel_size;) {
+        size_t chunk_size = pixel_size - offset;
+        if (chunk_size > sizeof(lvgl_pixel_swap_buffer)) {
+            chunk_size = sizeof(lvgl_pixel_swap_buffer);
+        }
+        chunk_size &= ~(size_t)1U;
+
+        for (size_t i = 0U; i < chunk_size; i += 2U) {
+            lvgl_pixel_swap_buffer[i] = pixels[offset + i + 1U];
+            lvgl_pixel_swap_buffer[i + 1U] = pixels[offset + i];
+        }
+
+        if (HAL_SPI_Transmit(&hspi1, lvgl_pixel_swap_buffer, (uint16_t)chunk_size, HAL_MAX_DELAY) != HAL_OK) {
+            Error_Handler();
+        }
+        offset += chunk_size;
+    }
+
+    HAL_GPIO_WritePin(LCD_CS_GPIO_Port, LCD_CS_Pin, GPIO_PIN_SET);
+    lv_display_flush_ready(display);
+}
+
+static void lvgl_flag_test_init(void)
+{
+    /* The ST7735S module used in the tutorial is 160x128 in landscape mode. */
+    static const uint8_t forbot_st7735_init[] = {
+        0xB1U, 3U, 0x01U, 0x2CU, 0x2DU,
+        0xB2U, 3U, 0x01U, 0x2CU, 0x2DU,
+        0xB3U, 6U, 0x01U, 0x2CU, 0x2DU, 0x01U, 0x2CU, 0x2DU,
+        0xB4U, 1U, 0x07U,
+        0xC0U, 3U, 0xA2U, 0x02U, 0x84U,
+        0xC1U, 1U, 0xC5U,
+        0xC2U, 2U, 0x0AU, 0x00U,
+        0xC3U, 2U, 0x8AU, 0x2AU,
+        0xC4U, 2U, 0x8AU, 0xEEU,
+        0xC5U, 1U, 0x0EU,
+        0xE0U, 16U, 0x0FU, 0x1AU, 0x0FU, 0x18U, 0x2FU, 0x28U, 0x20U, 0x22U,
+                   0x1FU, 0x1BU, 0x23U, 0x37U, 0x00U, 0x07U, 0x02U, 0x10U,
+        0xE1U, 16U, 0x0FU, 0x1BU, 0x0FU, 0x17U, 0x33U, 0x2CU, 0x29U, 0x2EU,
+                   0x30U, 0x30U, 0x39U, 0x3FU, 0x00U, 0x07U, 0x03U, 0x10U,
+        0xF0U, 1U, 0x01U,
+        0xF6U, 1U, 0x00U,
+        0x3AU, 1U, 0x05U,
+        0x36U, 1U, 0xA0U,
+        LV_LCD_CMD_DELAY_MS, 20U,
+        0x11U, 0U,
+        LV_LCD_CMD_DELAY_MS, 12U,
+        0x29U, 0U,
+        LV_LCD_CMD_DELAY_MS, 2U,
+        LV_LCD_CMD_DELAY_MS, LV_LCD_CMD_EOF
+    };
+
+    HAL_GPIO_WritePin(LCD_CS_GPIO_Port, LCD_CS_Pin, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(LCD_RES_GPIO_Port, LCD_RES_Pin, GPIO_PIN_RESET);
+    HAL_Delay(20U);
+    HAL_GPIO_WritePin(LCD_RES_GPIO_Port, LCD_RES_Pin, GPIO_PIN_SET);
+    HAL_Delay(120U);
+
+    lv_init();
+    lv_tick_set_cb(HAL_GetTick);
+
+    lv_display_t *display = lv_st7735_create(LVGL_TEST_WIDTH, LVGL_TEST_HEIGHT, LV_LCD_FLAG_NONE,
+                                             lvgl_lcd_send_cmd, lvgl_lcd_send_color);
+    if (display == NULL) {
+        Error_Handler();
+    }
+
+    lv_display_set_default(display);
+    lv_display_set_color_format(display, LV_COLOR_FORMAT_RGB565);
+    lv_display_set_buffers(display, lvgl_draw_buffer, NULL, sizeof(lvgl_draw_buffer),
+                           LV_DISPLAY_RENDER_MODE_PARTIAL);
+
+    /* Use the init values from the Forbot ST7735S tutorial, including landscape MADCTL. */
+    lv_st7735_send_cmd_list(display, forbot_st7735_init);
+
+    lv_obj_t *screen = lv_display_get_screen_active(display);
+    lv_obj_set_style_bg_color(screen, lv_color_hex(0xFFFFFFU), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_width(screen, 0, LV_PART_MAIN);
+
+    lv_obj_t *red_band = lv_obj_create(screen);
+    lv_obj_remove_style_all(red_band);
+    lv_obj_set_size(red_band, LVGL_TEST_WIDTH, LVGL_TEST_HEIGHT / 2U);
+    lv_obj_align(red_band, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_obj_set_style_bg_color(red_band, lv_color_hex(0xD4213DU), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(red_band, LV_OPA_COVER, LV_PART_MAIN);
+
+    lv_obj_t *orientation_label = lv_label_create(screen);
+    lv_label_set_text(orientation_label, "TOP");
+    lv_obj_align(orientation_label, LV_ALIGN_TOP_LEFT, 6, 6);
+}
 
 void process_data(uint16_t* data, uint16_t length)
 {
@@ -321,6 +464,8 @@ int main(void)
   MX_TIM3_Init();
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
+  lvgl_flag_test_init();
+
   HAL_TIM_Base_Start(&htim3);
   HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buffer, TOTAL_BUFFER_SIZE);
 
@@ -335,6 +480,8 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+    lv_timer_handler();
+
     if (buffer_ready_flag == 1)
     {
       // process first half of the buffer
