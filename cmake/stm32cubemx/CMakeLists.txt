@@ -98,3 +98,18 @@ set_target_properties(${CMAKE_PROJECT_NAME} PROPERTIES ADDITIONAL_CLEAN_FILES ${
 if((CMAKE_C_STANDARD EQUAL 90) OR (CMAKE_C_STANDARD EQUAL 99))
     message(ERROR "Generated code requires C11 or higher")
 endif()
+
+# LVGL middleware (kept outside the project root CMakeLists.txt).
+# Use LVGL's internal defaults until the project-specific lv_conf.h is added.
+set(LV_CONF_SKIP ON CACHE BOOL "Build LVGL with internal configuration defaults" FORCE)
+set(CONFIG_LV_BUILD_EXAMPLES OFF CACHE BOOL "Do not build LVGL examples" FORCE)
+set(CONFIG_LV_BUILD_DEMOS OFF CACHE BOOL "Do not build LVGL demos" FORCE)
+set(CONFIG_LV_USE_THORVG OFF CACHE BOOL "Do not build LVGL ThorVG support" FORCE)
+set(LV_FETCH_DEPENDENCIES OFF CACHE BOOL "Do not fetch optional LVGL dependencies" FORCE)
+set(LV_BUILD_INSTALL OFF CACHE BOOL "Do not install LVGL from this firmware project" FORCE)
+
+add_subdirectory(
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../Middlewares/Third_Party/lvgl
+    ${CMAKE_CURRENT_BINARY_DIR}/lvgl
+)
+target_link_libraries(${CMAKE_PROJECT_NAME} lvgl::lvgl)

@@ -1,0 +1,4 @@
+Upstream: https://github.com/lvgl/lvgl
+Tag: v9.6.0
+Commit: 80ca777e37a2b176770726a02e07a6fb79ef0b39
+License: MIT (see LICENCE.txt)
