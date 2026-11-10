@@ -100,8 +100,12 @@ if((CMAKE_C_STANDARD EQUAL 90) OR (CMAKE_C_STANDARD EQUAL 99))
 endif()
 
 # LVGL middleware (kept outside the project root CMakeLists.txt).
-# Use LVGL's internal defaults until the project-specific lv_conf.h is added.
-set(LV_CONF_SKIP ON CACHE BOOL "Build LVGL with internal configuration defaults" FORCE)
+# Use the project-specific configuration header for color format and widgets.
+set(LV_CONF_SKIP OFF CACHE BOOL "Skip lv_conf.h and use internal configuration defaults" FORCE)
+set(LV_BUILD_CONF_PATH
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../Core/Inc/lv_conf.h
+    CACHE PATH "Project LVGL configuration header" FORCE
+)
 set(CONFIG_LV_BUILD_EXAMPLES OFF CACHE BOOL "Do not build LVGL examples" FORCE)
 set(CONFIG_LV_BUILD_DEMOS OFF CACHE BOOL "Do not build LVGL demos" FORCE)
 set(CONFIG_LV_USE_THORVG OFF CACHE BOOL "Do not build LVGL ThorVG support" FORCE)
