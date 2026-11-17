@@ -68,8 +68,8 @@
 
 #define LCD_HEIGHT 128
 
-#define LVGL_TEST_WIDTH 160U
-#define LVGL_TEST_HEIGHT 128U
+#define LVGL_DISPLAY_WIDTH 160U
+#define LVGL_DISPLAY_HEIGHT 128U
 #define LVGL_DRAW_BUFFER_LINES 16U
 
 // refer to FFT visualization
@@ -109,7 +109,7 @@ float32_t window_buffer[FFT_FULL_BUFFER_SIZE];
 // bars for visualization
 float bars[NUM_BARS];
 
-static uint16_t lvgl_draw_buffer[LVGL_TEST_WIDTH * LVGL_DRAW_BUFFER_LINES];
+static uint16_t lvgl_draw_buffer[LVGL_DISPLAY_WIDTH * LVGL_DRAW_BUFFER_LINES];
 static uint8_t lvgl_pixel_swap_buffer[128];
 
 /* USER CODE END PV */
@@ -121,7 +121,7 @@ static void lvgl_lcd_send_cmd(lv_display_t *display, const uint8_t *command, siz
                               const uint8_t *parameters, size_t parameter_size);
 static void lvgl_lcd_send_color(lv_display_t *display, const uint8_t *command, size_t command_size,
                                 uint8_t *pixels, size_t pixel_size);
-static void lvgl_flag_test_init(void);
+static void lvgl_display_init(void);
 
 /* USER CODE END PFP */
 
@@ -187,7 +187,7 @@ static void lvgl_lcd_send_color(lv_display_t *display, const uint8_t *command, s
     lv_display_flush_ready(display);
 }
 
-static void lvgl_flag_test_init(void)
+static void lvgl_display_init(void)
 {
     /* The ST7735S module used in the tutorial is 160x128 in landscape mode. */
     static const uint8_t forbot_st7735_init[] = {
@@ -226,7 +226,7 @@ static void lvgl_flag_test_init(void)
     lv_init();
     lv_tick_set_cb(HAL_GetTick);
 
-    lv_display_t *display = lv_st7735_create(LVGL_TEST_WIDTH, LVGL_TEST_HEIGHT, LV_LCD_FLAG_NONE,
+    lv_display_t *display = lv_st7735_create(LVGL_DISPLAY_WIDTH, LVGL_DISPLAY_HEIGHT, LV_LCD_FLAG_NONE,
                                              lvgl_lcd_send_cmd, lvgl_lcd_send_color);
     if (display == NULL) {
         Error_Handler();
@@ -241,20 +241,12 @@ static void lvgl_flag_test_init(void)
     lv_st7735_send_cmd_list(display, forbot_st7735_init);
 
     lv_obj_t *screen = lv_display_get_screen_active(display);
-    lv_obj_set_style_bg_color(screen, lv_color_hex(0xFFFFFFU), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(screen, lv_color_hex(0x000000U), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(screen, 0, LV_PART_MAIN);
-
-    lv_obj_t *red_band = lv_obj_create(screen);
-    lv_obj_remove_style_all(red_band);
-    lv_obj_set_size(red_band, LVGL_TEST_WIDTH, LVGL_TEST_HEIGHT / 2U);
-    lv_obj_align(red_band, LV_ALIGN_BOTTOM_MID, 0, 0);
-    lv_obj_set_style_bg_color(red_band, lv_color_hex(0xD4213DU), LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(red_band, LV_OPA_COVER, LV_PART_MAIN);
-
-    lv_obj_t *orientation_label = lv_label_create(screen);
-    lv_label_set_text(orientation_label, "TOP");
-    lv_obj_align(orientation_label, LV_ALIGN_TOP_LEFT, 6, 6);
+    /* The panel keeps its GRAM contents across software resets. Redraw the whole
+     * screen so pixels from the previous flag test are replaced with black. */
+    lv_obj_invalidate(screen);
 }
 
 void process_data(uint16_t* data, uint16_t length)
@@ -464,7 +456,7 @@ int main(void)
   MX_TIM3_Init();
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
-  lvgl_flag_test_init();
+  lvgl_display_init();
 
   HAL_TIM_Base_Start(&htim3);
   HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buffer, TOTAL_BUFFER_SIZE);
