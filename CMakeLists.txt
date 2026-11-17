@@ -37,6 +37,25 @@ add_executable(${CMAKE_PROJECT_NAME})
 # Add STM32CubeMX generated sources
 add_subdirectory(cmake/stm32cubemx)
 
+# LVGL middleware configuration belongs here, outside the CubeMX-generated
+# CMake file, so regenerating the STM32 project does not remove it.
+set(LV_CONF_SKIP OFF CACHE BOOL "Skip lv_conf.h and use internal configuration defaults" FORCE)
+set(LV_BUILD_CONF_PATH
+    ${CMAKE_CURRENT_SOURCE_DIR}/Core/Inc/lv_conf.h
+    CACHE PATH "Project LVGL configuration header" FORCE
+)
+set(CONFIG_LV_BUILD_EXAMPLES OFF CACHE BOOL "Do not build LVGL examples" FORCE)
+set(CONFIG_LV_BUILD_DEMOS OFF CACHE BOOL "Do not build LVGL demos" FORCE)
+set(CONFIG_LV_USE_THORVG OFF CACHE BOOL "Do not build LVGL ThorVG support" FORCE)
+set(LV_FETCH_DEPENDENCIES OFF CACHE BOOL "Do not fetch optional LVGL dependencies" FORCE)
+set(LV_BUILD_INSTALL OFF CACHE BOOL "Do not install LVGL from this firmware project" FORCE)
+
+add_subdirectory(
+    ${CMAKE_CURRENT_SOURCE_DIR}/Middlewares/Third_Party/lvgl
+    ${CMAKE_CURRENT_BINARY_DIR}/lvgl
+)
+target_link_libraries(${CMAKE_PROJECT_NAME} lvgl::lvgl)
+
 # Link directories setup
 target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined library search paths
