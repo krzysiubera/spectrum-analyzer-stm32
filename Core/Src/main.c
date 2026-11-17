@@ -111,6 +111,9 @@ float bars[NUM_BARS];
 
 static uint16_t lvgl_draw_buffer[LVGL_DISPLAY_WIDTH * LVGL_DRAW_BUFFER_LINES];
 static uint8_t lvgl_pixel_swap_buffer[128];
+static lv_obj_t *peak_frequency_label;
+static volatile uint32_t latest_peak_hz;
+static volatile uint8_t latest_peak_valid;
 
 /* USER CODE END PV */
 
@@ -122,6 +125,7 @@ static void lvgl_lcd_send_cmd(lv_display_t *display, const uint8_t *command, siz
 static void lvgl_lcd_send_color(lv_display_t *display, const uint8_t *command, size_t command_size,
                                 uint8_t *pixels, size_t pixel_size);
 static void lvgl_display_init(void);
+static void peak_frequency_timer_cb(lv_timer_t *timer);
 
 /* USER CODE END PFP */
 
@@ -247,6 +251,35 @@ static void lvgl_display_init(void)
     /* The panel keeps its GRAM contents across software resets. Redraw the whole
      * screen so pixels from the previous flag test are replaced with black. */
     lv_obj_invalidate(screen);
+
+    peak_frequency_label = lv_label_create(screen);
+    lv_label_set_text(peak_frequency_label, "--.- Hz");
+    lv_obj_set_style_text_color(peak_frequency_label, lv_color_hex(0xFFFFFFU), LV_PART_MAIN);
+    lv_obj_align(peak_frequency_label, LV_ALIGN_CENTER, 0, 0);
+
+    if (lv_timer_create(peak_frequency_timer_cb, 100U, NULL) == NULL) {
+        Error_Handler();
+    }
+}
+
+static void peak_frequency_timer_cb(lv_timer_t *timer)
+{
+    (void)timer;
+    static uint8_t displayed_valid;
+    static uint32_t displayed_peak_hz;
+
+    if (latest_peak_valid == 0U) {
+        return;
+    }
+
+    const uint32_t peak_hz = latest_peak_hz;
+    if (displayed_valid != 0U && peak_hz == displayed_peak_hz) {
+        return;
+    }
+
+    lv_label_set_text_fmt(peak_frequency_label, "%lu Hz", (unsigned long)peak_hz);
+    displayed_peak_hz = peak_hz;
+    displayed_valid = 1U;
 }
 
 void process_data(uint16_t* data, uint16_t length)
@@ -356,6 +389,8 @@ void process_data(uint16_t* data, uint16_t length)
     peak_bin++;
 
     const float peak_hz = ((float32_t) peak_bin * SAMPLING_FREQ) / FFT_FULL_BUFFER_SIZE;
+    latest_peak_hz = (uint32_t)peak_hz;
+    latest_peak_valid = 1U;
 
     // linear grouping into bars
     // we group bins 0 ... 511 into NUM_BARS groups
