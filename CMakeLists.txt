@@ -51,7 +51,7 @@ set(LV_FETCH_DEPENDENCIES OFF CACHE BOOL "Do not fetch optional LVGL dependencie
 set(LV_BUILD_INSTALL OFF CACHE BOOL "Do not install LVGL from this firmware project" FORCE)
 
 add_subdirectory(
-    ${CMAKE_CURRENT_SOURCE_DIR}/Middlewares/Third_Party/lvgl
+    ${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/lvgl
     ${CMAKE_CURRENT_BINARY_DIR}/lvgl
 )
 target_link_libraries(${CMAKE_PROJECT_NAME} lvgl::lvgl)
